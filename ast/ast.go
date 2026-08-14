@@ -126,6 +126,9 @@ type PrefixExpression struct {
 func (pe *PrefixExpression) expressionNode()      {}
 func (pe *PrefixExpression) TokenLiteral() string { return pe.Token.Literal }
 func (pe *PrefixExpression) String() string {
+	if pe.Right == nil {
+		return "(" + pe.Operator + "<nil>)"
+	}
 	return "(" + pe.Operator + pe.Right.String() + ")"
 }
 
@@ -140,7 +143,18 @@ type InfixExpression struct {
 func (ie *InfixExpression) expressionNode()      {}
 func (ie *InfixExpression) TokenLiteral() string { return ie.Token.Literal }
 func (ie *InfixExpression) String() string {
-	return "(" + ie.Left.String() + " " + ie.Operator + " " + ie.Right.String() + ")"
+	var left, right string
+	if ie.Left != nil {
+		left = ie.Left.String()
+	} else {
+		left = "<nil>"
+	}
+	if ie.Right != nil {
+		right = ie.Right.String()
+	} else {
+		right = "<nil>"
+	}
+	return "(" + left + " " + ie.Operator + " " + right + ")"
 }
 
 // Boolean 布尔
