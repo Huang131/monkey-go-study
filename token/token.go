@@ -12,37 +12,38 @@ const (
 	EOF     = "EOF"
 
 	// 标识符 + 字面量
-	IDENT = "IDENT"
-	INT   = "INT"
-	TRUE  = "TRUE"
-	FALSE = "FALSE"
+	IDENT  = "IDENT"
+	INT    = "INT"
+	STRING = "STRING"
 
 	// 运算符
-	ASSIGN   = "ASSIGN"
-	PLUS     = "PLUS"
-	MINUS    = "MINUS"
-	BANG     = "BANG"
-	ASTERISK = "ASTERISK"
-	SLASH    = "SLASH"
+	ASSIGN   = "="
+	PLUS     = "+"
+	MINUS    = "-"
+	BANG     = "!"
+	ASTERISK = "*"
+	SLASH    = "/"
 
-	LT = "LT"
-	GT = "GT"
+	LT = "<"
+	GT = ">"
 
-	EQ     = "EQ"
-	NOT_EQ = "NOT_EQ"
+	EQ     = "=="
+	NOT_EQ = "!="
 
 	// 分隔符
-	COMMA     = "COMMA"
-	SEMICOLON = "SEMICOLON"
+	COMMA     = ","
+	SEMICOLON = ";"
 
-	LPAREN = "LPAREN"
-	RPAREN = "RPAREN"
-	LBRACE = "LBRACE"
-	RBRACE = "RBRACE"
+	LPAREN = "("
+	RPAREN = ")"
+	LBRACE = "{"
+	RBRACE = "}"
 
 	// 关键字
 	FUNCTION = "FUNCTION"
 	LET      = "LET"
+	TRUE     = "TRUE"
+	FALSE    = "FALSE"
 	IF       = "IF"
 	ELSE     = "ELSE"
 	RETURN   = "RETURN"
@@ -51,11 +52,11 @@ const (
 var keywords = map[string]TokenType{
 	"fn":     FUNCTION,
 	"let":    LET,
+	"true":   TRUE,
+	"false":  FALSE,
 	"if":     IF,
 	"else":   ELSE,
 	"return": RETURN,
-	"true":   TRUE,
-	"false":  FALSE,
 }
 
 func LookupIdent(ident string) TokenType {
