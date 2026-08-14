@@ -4,7 +4,9 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"monkey-go/evaluator"
 	"monkey-go/lexer"
+	"monkey-go/object"
 	"monkey-go/parser"
 	"strings"
 )
@@ -13,6 +15,7 @@ const PROMPT = ">> "
 
 func Start(in io.Reader, out io.Writer) {
 	scanner := bufio.NewScanner(in)
+	env := object.NewEnvironment() // REPL 全局环境，变量持久化
 
 	for {
 		fmt.Fprintf(out, PROMPT)
@@ -32,15 +35,19 @@ func Start(in io.Reader, out io.Writer) {
 
 		l := lexer.New(line)
 		p := parser.New(l)
-
 		program := p.ParseProgram()
+
 		if len(p.Errors()) != 0 {
 			printParserErrors(out, p.Errors())
 			continue
 		}
 
-		io.WriteString(out, program.String())
-		io.WriteString(out, "\n")
+		// 调用 Evaluator 求值，输出结果
+		result := evaluator.Eval(program, env)
+		if result != nil {
+			io.WriteString(out, result.Inspect())
+			io.WriteString(out, "\n")
+		}
 	}
 }
 
