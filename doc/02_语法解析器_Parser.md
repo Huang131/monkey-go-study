@@ -107,12 +107,14 @@ type infixParseFn func(left ast.Expression) ast.Expression
 ### 运算符优先级常量与映射表
 ```go
 const (
-	lowest int = iota
-	equals      // == !=
-	lessgreater // < >
-	sum         // + -
-	product     // * /
-	call        // 函数调用，LPAREN，最高优先级
+	_ int = iota    // 0，被丢弃，不直接使用
+	lowest          // 1，最基础优先级
+	equals          // 2，== !=
+	lessgreater     // 3，< >
+	sum             // 4，+ -
+	product         // 5，* /
+	prefix          // 6，一元前缀运算符 ! -
+	call            // 7，函数调用，左括号拥有最高优先级
 )
 
 var precedences = map[token.TokenType]int{
@@ -127,6 +129,41 @@ var precedences = map[token.TokenType]int{
 	token.LPAREN:   call,
 }
 ```
+
+> ⚠注意：iota 从 0 开始，第一个常量 `_` 占位表示 0，不直接使用。实际从 `lowest(1)` 开始。
+
+### 6.7 prefix（前缀）优先级的特殊作用
+
+`parsePrefixExpression` 在递归调用 `parseExpression` 时，传入的是 `prefix` 而非 `lowest`：
+
+```go
+func (p *Parser) parsePrefixExpression() ast.Expression {
+	expression := &ast.PrefixExpression{
+		Token:    p.curToken,
+		Operator: p.curToken.Literal,  // "!" 或 "-"
+	}
+	p.nextToken()
+	expression.Right = p.parseExpression(prefix)  // 注意：传入 prefix，不是 lowest
+	return expression
+}
+```
+
+**为什么要用 prefix（值为 6），而不是 lowest（值为 1）？**
+
+| 原因 | 解释 | 示例 |
+|-----|------|-----|
+| 支持连续一元运算符 | `prefix(6) > lowest(1)`，确保继续解析后续内容 | `!!true` → `!(!(true))` |
+| 保证正确的绑定顺序 | `-a + b` 应解析为 `(-a) + b`，不是 `-(a + b)` | `prefix` 确保先绑定 `a`，再处理 `+` |
+
+**优先级对比示例**：
+
+| 表达式 | 如果用 lowest(1) | 正确用 prefix(6) |
+|--------|-----------------|------------------|
+| `-a + b` | `-(a + b)` ❌ | `(-a) + b` ✅ |
+| `!!true` | `!(true)` ❌ | `!(!(true))` ✅ |
+| `!a * b` | `!(a * b)` ❌ | `(!a) * b` ✅ |
+
+> 核心原理：`parseExpression(prefix)` 传入的 `prefix` 作为**下限**，只有优先级高于 `prefix` 的运算符才会被继续解析，这确保了一元前缀运算符先紧绑操作数。
 
 > ⭐重点：`token.LPAREN` 左括号拥有双重语义
 1. **prefix场景**：`(1+2)`，表达式开头遇到左括号，作为分组表达式。

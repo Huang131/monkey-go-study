@@ -296,6 +296,13 @@ func (p *Parser) parseFunctionLiteral() ast.Expression {
 	return lit
 }
 
+// parseFunctionParameters 解析函数字面量的形参列表
+//
+// 注意：形参只能是标识符，不支持表达式
+// 合法的形参：fn(a, b, c) {}
+// 非法的形参：fn(a + b, 1, fn(){}) {}  // 语法错误
+//
+// 这是与实参列表的本质区别：形参是"变量名"，实参是"表达式"
 func (p *Parser) parseFunctionParameters() []*ast.Identifier {
 	identifiers := []*ast.Identifier{}
 
@@ -328,6 +335,13 @@ func (p *Parser) parseCallExpression(function ast.Expression) ast.Expression {
 	return exp
 }
 
+// parseCallArguments 解析函数调用表达式的实参列表
+//
+// 注意：实参可以是任意表达式，这是与形参列表的本质区别
+// 合法的实参：add(1, 1 + 2, fn() {}, true, myVar)
+// 非法的实参：无（实参可以是任何合法的表达式）
+//
+// 实参解析使用 parseExpression(lowest)，可以递归解析任意复杂的表达式
 func (p *Parser) parseCallArguments() []ast.Expression {
 	args := []ast.Expression{}
 
