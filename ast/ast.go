@@ -1,10 +1,11 @@
 package ast
 
 import (
+	"bytes"
 	"monkey-go/token"
 )
 
-// Node AST节点统一接口
+// Node AST节点公共接口
 type Node interface {
 	TokenLiteral() string
 	String() string
@@ -22,7 +23,7 @@ type Expression interface {
 	expressionNode()
 }
 
-// Program 根节点，保存所有语句
+// Program 根节点，整个程序,保存所有语句
 type Program struct {
 	Statements []Statement
 }
@@ -33,16 +34,15 @@ func (p *Program) TokenLiteral() string {
 	}
 	return ""
 }
-
 func (p *Program) String() string {
-	var out string
+	var out bytes.Buffer
 	for _, s := range p.Statements {
-		out += s.String()
+		out.WriteString(s.String())
 	}
-	return out
+	return out.String()
 }
 
-// LetStatement let 语句 let x = 10;
+// LetStatement let x = 10;
 type LetStatement struct {
 	Token token.Token
 	Name  *Identifier
@@ -52,28 +52,18 @@ type LetStatement struct {
 func (ls *LetStatement) statementNode()       {}
 func (ls *LetStatement) TokenLiteral() string { return ls.Token.Literal }
 func (ls *LetStatement) String() string {
-	var out string
-	out += ls.TokenLiteral() + " "
-	out += ls.Name.String()
-	out += " = "
+	var out bytes.Buffer
+	out.WriteString(ls.TokenLiteral() + " ")
+	out.WriteString(ls.Name.String())
+	out.WriteString(" = ")
 	if ls.Value != nil {
-		out += ls.Value.String()
+		out.WriteString(ls.Value.String())
 	}
-	out += ";"
-	return out
+	out.WriteString(";")
+	return out.String()
 }
 
-// Identifier 标识符
-type Identifier struct {
-	Token token.Token
-	Value string
-}
-
-func (i *Identifier) expressionNode()      {}
-func (i *Identifier) TokenLiteral() string { return i.Token.Literal }
-func (i *Identifier) String() string       { return i.Value }
-
-// ReturnStatement return 语句
+// ReturnStatement return 10;
 type ReturnStatement struct {
 	Token       token.Token
 	ReturnValue Expression
@@ -82,13 +72,13 @@ type ReturnStatement struct {
 func (rs *ReturnStatement) statementNode()       {}
 func (rs *ReturnStatement) TokenLiteral() string { return rs.Token.Literal }
 func (rs *ReturnStatement) String() string {
-	var out string
-	out += rs.TokenLiteral() + " "
+	var out bytes.Buffer
+	out.WriteString(rs.TokenLiteral() + " ")
 	if rs.ReturnValue != nil {
-		out += rs.ReturnValue.String()
+		out.WriteString(rs.ReturnValue.String())
 	}
-	out += ";"
-	return out
+	out.WriteString(";")
+	return out.String()
 }
 
 // ExpressionStatement 表达式语句，把表达式包装成语句
@@ -106,7 +96,17 @@ func (es *ExpressionStatement) String() string {
 	return ""
 }
 
-// IntegerLiteral 整数字面量
+// Identifier 标识符 x y
+type Identifier struct {
+	Token token.Token
+	Value string
+}
+
+func (i *Identifier) expressionNode()      {}
+func (i *Identifier) TokenLiteral() string { return i.Token.Literal }
+func (i *Identifier) String() string       { return i.Value }
+
+// IntegerLiteral 数字字面量 10
 type IntegerLiteral struct {
 	Token token.Token
 	Value int64
@@ -115,6 +115,19 @@ type IntegerLiteral struct {
 func (il *IntegerLiteral) expressionNode()      {}
 func (il *IntegerLiteral) TokenLiteral() string { return il.Token.Literal }
 func (il *IntegerLiteral) String() string       { return il.Token.Literal }
+
+// BooleanLiteral 布尔字面量 true/false，parser里面叫 ast.Boolean，实际类型名就是 BooleanLiteral
+type BooleanLiteral struct {
+	Token token.Token
+	Value bool
+}
+
+// 兼容parser代码里面的别名引用，parser代码写的是ast.Boolean，实际就是 *BooleanLiteral
+type Boolean = BooleanLiteral
+
+func (bl *BooleanLiteral) expressionNode()      {}
+func (bl *BooleanLiteral) TokenLiteral() string { return bl.Token.Literal }
+func (bl *BooleanLiteral) String() string       { return bl.Token.Literal }
 
 // PrefixExpression 前缀表达式 !true, -5
 type PrefixExpression struct {
@@ -126,10 +139,12 @@ type PrefixExpression struct {
 func (pe *PrefixExpression) expressionNode()      {}
 func (pe *PrefixExpression) TokenLiteral() string { return pe.Token.Literal }
 func (pe *PrefixExpression) String() string {
-	if pe.Right == nil {
-		return "(" + pe.Operator + "<nil>)"
-	}
-	return "(" + pe.Operator + pe.Right.String() + ")"
+	var out bytes.Buffer
+	out.WriteString("(")
+	out.WriteString(pe.Operator)
+	out.WriteString(pe.Right.String())
+	out.WriteString(")")
+	return out.String()
 }
 
 // InfixExpression 中缀表达式 a + b
@@ -143,31 +158,16 @@ type InfixExpression struct {
 func (ie *InfixExpression) expressionNode()      {}
 func (ie *InfixExpression) TokenLiteral() string { return ie.Token.Literal }
 func (ie *InfixExpression) String() string {
-	var left, right string
-	if ie.Left != nil {
-		left = ie.Left.String()
-	} else {
-		left = "<nil>"
-	}
-	if ie.Right != nil {
-		right = ie.Right.String()
-	} else {
-		right = "<nil>"
-	}
-	return "(" + left + " " + ie.Operator + " " + right + ")"
+	var out bytes.Buffer
+	out.WriteString("(")
+	out.WriteString(ie.Left.String())
+	out.WriteString(" " + ie.Operator + " ")
+	out.WriteString(ie.Right.String())
+	out.WriteString(")")
+	return out.String()
 }
 
-// Boolean 布尔
-type Boolean struct {
-	Token token.Token
-	Value bool
-}
-
-func (b *Boolean) expressionNode()      {}
-func (b *Boolean) TokenLiteral() string { return b.Token.Literal }
-func (b *Boolean) String() string       { return b.Token.Literal }
-
-// IfExpression if‑else 表达式
+// IfExpression if(cond) {a} else {b}
 type IfExpression struct {
 	Token       token.Token
 	Condition   Expression
@@ -178,16 +178,16 @@ type IfExpression struct {
 func (ie *IfExpression) expressionNode()      {}
 func (ie *IfExpression) TokenLiteral() string { return ie.Token.Literal }
 func (ie *IfExpression) String() string {
-	var out string
-	out += "if"
-	out += ie.Condition.String()
-	out += " "
-	out += ie.Consequence.String()
+	var out bytes.Buffer
+	out.WriteString("if")
+	out.WriteString(ie.Condition.String())
+	out.WriteString(" ")
+	out.WriteString(ie.Consequence.String())
 	if ie.Alternative != nil {
-		out += "else "
-		out += ie.Alternative.String()
+		out.WriteString("else ")
+		out.WriteString(ie.Alternative.String())
 	}
-	return out
+	return out.String()
 }
 
 // BlockStatement 代码块 { ... }
@@ -199,14 +199,14 @@ type BlockStatement struct {
 func (bs *BlockStatement) statementNode()       {}
 func (bs *BlockStatement) TokenLiteral() string { return bs.Token.Literal }
 func (bs *BlockStatement) String() string {
-	var out string
+	var out bytes.Buffer
 	for _, s := range bs.Statements {
-		out += s.String()
+		out.WriteString(s.String())
 	}
-	return out
+	return out.String()
 }
 
-// FunctionLiteral 函数字面量 fn(x,y){...}
+// FunctionLiteral fn(x,y){x+y} 函数字面量
 type FunctionLiteral struct {
 	Token      token.Token
 	Parameters []*Identifier
@@ -216,22 +216,22 @@ type FunctionLiteral struct {
 func (fl *FunctionLiteral) expressionNode()      {}
 func (fl *FunctionLiteral) TokenLiteral() string { return fl.Token.Literal }
 func (fl *FunctionLiteral) String() string {
-	var out string
+	var out bytes.Buffer
 	params := make([]string, 0, len(fl.Parameters))
 	for _, p := range fl.Parameters {
 		params = append(params, p.String())
 	}
-	out += fl.TokenLiteral()
-	out += "("
+	out.WriteString(fl.TokenLiteral())
+	out.WriteString("(")
 	for i, p := range params {
 		if i > 0 {
-			out += ", "
+			out.WriteString(", ")
 		}
-		out += p
+		out.WriteString(p)
 	}
-	out += ") "
-	out += fl.Body.String()
-	return out
+	out.WriteString(")")
+	out.WriteString(fl.Body.String())
+	return out.String()
 }
 
 // CallExpression 函数调用 add(1,2)
@@ -244,19 +244,19 @@ type CallExpression struct {
 func (ce *CallExpression) expressionNode()      {}
 func (ce *CallExpression) TokenLiteral() string { return ce.Token.Literal }
 func (ce *CallExpression) String() string {
-	var out string
+	var out bytes.Buffer
 	args := make([]string, 0, len(ce.Arguments))
-	for _, a := range ce.Arguments {
-		args = append(args, a.String())
+	for _, arg := range ce.Arguments {
+		args = append(args, arg.String())
 	}
-	out += ce.Function.String()
-	out += "("
-	for i, arg := range args {
+	out.WriteString(ce.Function.String())
+	out.WriteString("(")
+	for i, a := range args {
 		if i > 0 {
-			out += ", "
+			out.WriteString(", ")
 		}
-		out += arg
+		out.WriteString(a)
 	}
-	out += ")"
-	return out
+	out.WriteString(")")
+	return out.String()
 }
