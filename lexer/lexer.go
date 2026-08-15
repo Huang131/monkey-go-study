@@ -120,10 +120,22 @@ func (l *Lexer) NextToken() token.Token {
 		tok = newToken(token.LBRACE, l.ch)
 	case '}':
 		tok = newToken(token.RBRACE, l.ch)
+	case '[':
+		tok = newToken(token.LBRACKET, l.ch)
+	case ']':
+		tok = newToken(token.RBRACKET, l.ch)
 	case ',':
 		tok = newToken(token.COMMA, l.ch)
 	case ';':
 		tok = newToken(token.SEMICOLON, l.ch)
+	case ':':
+		tok = newToken(token.COLON, l.ch)
+
+	// ----- 字符串字面量 -----
+	case '"':
+		tok.Type = token.STRING
+		tok.Literal = l.readString()
+		return tok // readString 已消费完字符，必须提前返回
 
 	// ----- 结束标记 -----
 	case 0:
@@ -206,4 +218,24 @@ func (l *Lexer) skipWhitespace() {
 	for l.ch == ' ' || l.ch == '\t' || l.ch == '\n' || l.ch == '\r' {
 		l.readChar()
 	}
+}
+
+// readString 读取字符串字面量（双引号包裹的内容）
+//
+// 设计：读取双引号之间的所有字符，遇到结束双引号停止
+// 注意：当前不支持转义字符，如 "hello\nworld"
+func (l *Lexer) readString() string {
+	startPosition := l.position + 1 // 跳过开始的双引号
+	l.readChar()                    // 移动到第一个字符
+
+	for l.ch != '"' {
+		l.readChar()
+	}
+
+	// 此时 l.ch == '"'，l.position 指向结束双引号
+	// 提取 startPosition 到 position（不含）的内容，即去掉引号
+	result := l.input[startPosition:l.position]
+
+	l.readChar() // 跳过结束的双引号，准备读取下一个 token
+	return result
 }

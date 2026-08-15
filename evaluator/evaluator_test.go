@@ -222,3 +222,346 @@ func testNullObject(t *testing.T, obj object.Object) bool {
 	}
 	return true
 }
+
+// =============================================================================
+// 字符串测试
+// =============================================================================
+
+func TestStringLiteral(t *testing.T) {
+	input := `"Hello World!"`
+	evaluated := testEval(input)
+	str, ok := evaluated.(*object.String)
+	if !ok {
+		t.Fatalf("object is not String. got=%T (%+v)", evaluated, evaluated)
+	}
+	if str.Value != "Hello World!" {
+		t.Errorf("String has wrong value. got=%q, want=%q", str.Value, "Hello World!")
+	}
+}
+
+func TestStringConcatenation(t *testing.T) {
+	input := `"Hello" + " " + "World!"`
+	evaluated := testEval(input)
+	str, ok := evaluated.(*object.String)
+	if !ok {
+		t.Fatalf("object is not String. got=%T (%+v)", evaluated, evaluated)
+	}
+	if str.Value != "Hello World!" {
+		t.Errorf("String has wrong value. got=%q, want=%q", str.Value, "Hello World!")
+	}
+}
+
+// =============================================================================
+// 数组测试
+// =============================================================================
+
+func TestArrayLiterals(t *testing.T) {
+	input := `[1, 2 * 2, 3 + 3]`
+	evaluated := testEval(input)
+	result, ok := evaluated.(*object.Array)
+	if !ok {
+		t.Fatalf("object is not Array. got=%T (%+v)", evaluated, evaluated)
+	}
+	if len(result.Elements) != 3 {
+		t.Fatalf("array has wrong num of elements. got=%d, want=3", len(result.Elements))
+	}
+	testIntegerObject(t, result.Elements[0], 1)
+	testIntegerObject(t, result.Elements[1], 4)
+	testIntegerObject(t, result.Elements[2], 6)
+}
+
+func TestArrayIndexExpressions(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected interface{}
+	}{
+		{"[1, 2, 3][0]", 1},
+		{"[1, 2, 3][1]", 2},
+		{"[1, 2, 3][2]", 3},
+		{"[1, 2, 3][-1]", nil}, // 越界返回 NULL
+		{"[1, 2, 3][3]", nil},  // 越界返回 NULL
+		{"[1][0]", 1},
+	}
+
+	for _, tt := range tests {
+		evaluated := testEval(tt.input)
+		switch expected := tt.expected.(type) {
+		case int:
+			testIntegerObject(t, evaluated, int64(expected))
+		case nil:
+			testNullObject(t, evaluated)
+		}
+	}
+}
+
+// =============================================================================
+// 哈希测试
+// =============================================================================
+
+func TestHashLiterals(t *testing.T) {
+	input := `let two = "two"; {"one": 1 + 0, two: 2 * 1, "thr" + "ee": 3}`
+	evaluated := testEval(input)
+	result, ok := evaluated.(*object.Hash)
+	if !ok {
+		t.Fatalf("Eval didn't return Hash. got=%T (%+v)", evaluated, evaluated)
+	}
+	if len(result.Pairs) != 3 {
+		t.Fatalf("Hash has wrong num of pairs. got=%d, want=3", len(result.Pairs))
+	}
+
+	// 验证哈希内容（通过 Key.Inspect() 获取原始 key 值）
+	for _, pair := range result.Pairs {
+		keyStr := pair.Key.Inspect()
+		var expValue int64
+		switch keyStr {
+		case "one":
+			expValue = 1
+		case "two":
+			expValue = 2
+		case "three":
+			expValue = 3
+		}
+		testIntegerObject(t, pair.Value, expValue)
+	}
+}
+
+func TestHashIndexExpressions(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected interface{}
+	}{
+		{`{"foo": 5}["foo"]`, 5},
+		{`{"foo": 5}["bar"]`, nil}, // key不存在返回NULL
+		{`let key = "foo"; {"foo": 5}[key]`, 5},
+	}
+
+	for _, tt := range tests {
+		evaluated := testEval(tt.input)
+		switch expected := tt.expected.(type) {
+		case int:
+			testIntegerObject(t, evaluated, int64(expected))
+		case nil:
+			testNullObject(t, evaluated)
+		}
+	}
+}
+
+// =============================================================================
+// 内置函数测试
+// =============================================================================
+
+func TestBuiltinLen(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected interface{}
+	}{
+		{`len("")`, 0},
+		{`len("four")`, 4},
+		{`len("hello world")`, 11},
+		{`len([1, 2, 3])`, 3},
+		{`len([])`, 0},
+	}
+
+	for _, tt := range tests {
+		evaluated := testEval(tt.input)
+		switch expected := tt.expected.(type) {
+		case int:
+			testIntegerObject(t, evaluated, int64(expected))
+		}
+	}
+}
+
+func TestBuiltinFirst(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected interface{}
+	}{
+		{"first([1, 2, 3])", 1},
+		{"first([5])", 5},
+		{"first([])", nil}, // 空数组返回NULL
+	}
+
+	for _, tt := range tests {
+		evaluated := testEval(tt.input)
+		switch expected := tt.expected.(type) {
+		case int:
+			testIntegerObject(t, evaluated, int64(expected))
+		case nil:
+			testNullObject(t, evaluated)
+		}
+	}
+}
+
+func TestBuiltinLast(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected interface{}
+	}{
+		{"last([1, 2, 3])", 3},
+		{"last([5])", 5},
+		{"last([])", nil}, // 空数组返回NULL
+	}
+
+	for _, tt := range tests {
+		evaluated := testEval(tt.input)
+		switch expected := tt.expected.(type) {
+		case int:
+			testIntegerObject(t, evaluated, int64(expected))
+		case nil:
+			testNullObject(t, evaluated)
+		}
+	}
+}
+
+func TestBuiltinRest(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected []int64
+	}{
+		{"rest([1, 2, 3])", []int64{2, 3}},
+		{"rest([5])", nil}, // 单元素数组返回NULL
+		{"rest([])", nil},  // 空数组返回NULL
+	}
+
+	for _, tt := range tests {
+		evaluated := testEval(tt.input)
+		if tt.expected == nil {
+			testNullObject(t, evaluated)
+		} else {
+			result, ok := evaluated.(*object.Array)
+			if !ok {
+				t.Fatalf("object is not Array. got=%T (%+v)", evaluated, evaluated)
+			}
+			if len(result.Elements) != len(tt.expected) {
+				t.Errorf("wrong num of elements. got=%d, want=%d",
+					len(result.Elements), len(tt.expected))
+			}
+			for i, exp := range tt.expected {
+				testIntegerObject(t, result.Elements[i], exp)
+			}
+		}
+	}
+}
+
+func TestBuiltinPush(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected []int64
+	}{
+		{"push([], 1)", []int64{1}},
+		{"push([1, 2], 3)", []int64{1, 2, 3}},
+		{"push([1], 2)", []int64{1, 2}},
+	}
+
+	for _, tt := range tests {
+		evaluated := testEval(tt.input)
+		result, ok := evaluated.(*object.Array)
+		if !ok {
+			t.Fatalf("object is not Array. got=%T (%+v)", evaluated, evaluated)
+		}
+		if len(result.Elements) != len(tt.expected) {
+			t.Errorf("wrong num of elements. got=%d, want=%d",
+				len(result.Elements), len(tt.expected))
+		}
+		for i, exp := range tt.expected {
+			testIntegerObject(t, result.Elements[i], exp)
+		}
+	}
+}
+
+// =============================================================================
+// 函数字面量测试（补充）
+// =============================================================================
+
+func TestFunctionLiteral(t *testing.T) {
+	input := `fn(x) { x + 2 };`
+	evaluated := testEval(input)
+	fn, ok := evaluated.(*object.Function)
+	if !ok {
+		t.Fatalf("object is not Function. got=%T (%+v)", evaluated, evaluated)
+	}
+	if len(fn.Parameters) != 1 {
+		t.Fatalf("function has wrong num of parameters. got=%d", len(fn.Parameters))
+	}
+	if fn.Parameters[0].Value != "x" {
+		t.Fatalf("parameter is not 'x'. got=%q", fn.Parameters[0].Value)
+	}
+}
+
+func TestFunctionCall(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected int64
+	}{
+		{"let identity = fn(x) { x; }; identity(5);", 5},
+		{"let double = fn(x) { x * 2; }; double(5);", 10},
+		{"let add = fn(x, y) { x + y; }; add(5 + 5, 10);", 20},
+		{"fn(x) { x; }(5)", 5},
+	}
+
+	for _, tt := range tests {
+		testIntegerObject(t, testEval(tt.input), tt.expected)
+	}
+}
+
+func TestClosures(t *testing.T) {
+	input := `
+let newAdder = fn(x) {
+    fn(y) { x + y };
+};
+let addTwo = newAdder(2);
+addTwo(3);`
+	evaluated := testEval(input)
+	testIntegerObject(t, evaluated, 5)
+}
+
+// =============================================================================
+// let语句测试（补充）
+// =============================================================================
+
+func TestLetStatements(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected int64
+	}{
+		{"let a = 5; a;", 5},
+		{"let a = 5 * 5; a;", 25},
+		{"let a = 5; let b = a; b;", 5},
+		{"let a = 5; let b = a; let c = a + b + 5; c;", 15},
+	}
+
+	for _, tt := range tests {
+		testIntegerObject(t, testEval(tt.input), tt.expected)
+	}
+}
+
+// =============================================================================
+// 错误处理测试（补充）
+// =============================================================================
+
+func TestErrorHandlingWithBuiltins(t *testing.T) {
+	tests := []struct {
+		input           string
+		expectedMessage string
+	}{
+		{"len(1)", "argument to len not supported, got INTEGER"},
+		{"first(1)", "argument to first must be ARRAY, got INTEGER"},
+		{"last(1)", "argument to last must be ARRAY, got INTEGER"},
+		{"rest(1)", "argument to rest must be ARRAY, got INTEGER"},
+		{"push(1, 2)", "argument to push must be ARRAY, got INTEGER"},
+		{"len(1, 2)", "wrong number of arguments. got=2, want=1"},
+	}
+
+	for _, tt := range tests {
+		evaluated := testEval(tt.input)
+		errObj, ok := evaluated.(*object.Error)
+		if !ok {
+			t.Errorf("no error object returned. got=%T (%+v)", evaluated, evaluated)
+			continue
+		}
+		if errObj.Message != tt.expectedMessage {
+			t.Errorf("wrong error message. expected=%q, got=%q",
+				tt.expectedMessage, errObj.Message)
+		}
+	}
+}

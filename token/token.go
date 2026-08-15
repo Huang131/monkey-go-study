@@ -49,6 +49,9 @@ const (
 	RPAREN    = ")"
 	LBRACE    = "{"
 	RBRACE    = "}"
+	LBRACKET  = "["
+	RBRACKET  = "]"
+	COLON     = ":"
 
 	// 关键字（保留字）
 	// 注意：关键字本质上是特殊的 IDENT，通过 LookupIdent 转换

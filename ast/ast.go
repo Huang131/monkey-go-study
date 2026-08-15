@@ -315,3 +315,91 @@ func (ce *CallExpression) String() string {
 	out.WriteString(")")
 	return out.String() // "add(1, 2)"
 }
+
+// =============================================================================
+// 扩展类型节点：字符串、数组、哈希
+// =============================================================================
+
+// StringLiteral 字符串字面量
+// 语法: "hello world"
+// 示例: let msg = "hello";
+type StringLiteral struct {
+	Token token.Token // STRING Token
+	Value string      // 字符串内容（不含引号）
+}
+
+func (sl *StringLiteral) expressionNode()      {}
+func (sl *StringLiteral) TokenLiteral() string { return sl.Token.Literal }
+func (sl *StringLiteral) String() string       { return sl.Token.Literal }
+
+// ArrayLiteral 数组字面量
+// 语法: [<element>, <element>, ...]
+// 示例: [1, 2, 3], ["a", "b", fn(x){x}]
+type ArrayLiteral struct {
+	Token    token.Token  // "[" Token
+	Elements []Expression // 数组元素表达式列表（元素可以是任意表达式）
+}
+
+func (al *ArrayLiteral) expressionNode()      {}
+func (al *ArrayLiteral) TokenLiteral() string { return al.Token.Literal }
+func (al *ArrayLiteral) String() string {
+	var out bytes.Buffer
+	out.WriteString("[")
+	for i, elem := range al.Elements {
+		if i > 0 {
+			out.WriteString(", ")
+		}
+		out.WriteString(elem.String())
+	}
+	out.WriteString("]")
+	return out.String()
+}
+
+// IndexExpression 索引表达式（数组元素访问和哈希键访问共用）
+// 语法: <left>[<index>]  或  <left>[<key>]
+// 示例: arr[0], hash["name"], arr[i+1]
+type IndexExpression struct {
+	Token token.Token // "[" Token
+	Left  Expression  // 被索引的对象（数组或哈希）
+	Index Expression  // 索引表达式
+}
+
+func (ie *IndexExpression) expressionNode()      {}
+func (ie *IndexExpression) TokenLiteral() string { return ie.Token.Literal }
+func (ie *IndexExpression) String() string {
+	var out bytes.Buffer
+	out.WriteString("(")
+	out.WriteString(ie.Left.String())
+	out.WriteString(")[")
+	out.WriteString(ie.Index.String())
+	out.WriteString("]")
+	return out.String()
+}
+
+// HashLiteral 哈希字面量
+// 语法: { <key>: <value>, ... }
+// 示例: {"name": "Tom", "age": 25}
+// 限制: key只能是字符串、整数、布尔（其他类型运行时报错）
+type HashLiteral struct {
+	Token token.Token               // "{" Token
+	Pairs map[Expression]Expression // key-value 对（key和value都是AST表达式）
+}
+
+func (hl *HashLiteral) expressionNode()      {}
+func (hl *HashLiteral) TokenLiteral() string { return hl.Token.Literal }
+func (hl *HashLiteral) String() string {
+	var out bytes.Buffer
+	out.WriteString("{")
+	i := 0
+	for key, value := range hl.Pairs {
+		if i > 0 {
+			out.WriteString(", ")
+		}
+		out.WriteString(key.String())
+		out.WriteString(": ")
+		out.WriteString(value.String())
+		i++
+	}
+	out.WriteString("}")
+	return out.String()
+}

@@ -23,6 +23,10 @@ const (
 	RETURN_VALUE_OBJ = "RETURN_VALUE" // return 语句的返回值包装
 	ERROR_OBJ        = "ERROR"        // 运行时错误
 	FUNCTION_OBJ     = "FUNCTION"     // 函数对象
+	STRING_OBJ       = "STRING"       // 字符串对象
+	ARRAY_OBJ        = "ARRAY"        // 数组对象
+	HASH_OBJ         = "HASH"         // 哈希对象
+	BUILTIN_OBJ      = "BUILTIN"      // 内置函数对象
 )
 
 // =============================================================================
@@ -49,6 +53,11 @@ type Integer struct {
 func (i *Integer) Type() ObjectType { return INTEGER_OBJ }
 func (i *Integer) Inspect() string  { return fmt.Sprintf("%d", i.Value) }
 
+// HashKey 实现 Hashable 接口
+func (i *Integer) HashKey() HashKey {
+	return HashKey{Type: i.Type(), Value: uint64(i.Value)}
+}
+
 // Boolean 布尔值对象
 //
 // 设计决策：复用全局单例 TRUE/FALSE，避免重复堆分配
@@ -59,6 +68,14 @@ type Boolean struct {
 
 func (b *Boolean) Type() ObjectType { return BOOLEAN_OBJ }
 func (b *Boolean) Inspect() string  { return fmt.Sprintf("%t", b.Value) }
+
+// HashKey 实现 Hashable 接口
+func (b *Boolean) HashKey() HashKey {
+	if b.Value {
+		return HashKey{Type: b.Type(), Value: 1}
+	}
+	return HashKey{Type: b.Type(), Value: 0}
+}
 
 // Null 空值对象
 // 对应源码中的 null，表示"无值"或"未定义"
@@ -210,3 +227,118 @@ func (f *Function) Inspect() string {
 
 	return out.String()
 }
+
+// String 字符串运行时对象
+// 直接复用 Go 原生 string 类型，不自己造存储
+type String struct {
+	Value string
+}
+
+func (s *String) Type() ObjectType { return STRING_OBJ }
+func (s *String) Inspect() string  { return s.Value }
+
+// HashKey 实现 Hashable 接口
+func (s *String) HashKey() HashKey {
+	h := fnvHash(s.Value)
+	return HashKey{Type: s.Type(), Value: h}
+}
+
+// fnv-1a 64位哈希算法
+func fnvHash(s string) uint64 {
+	h := uint64(14695981039346656037) // FNV offset basis
+	for i := 0; i < len(s); i++ {
+		h ^= uint64(s[i])
+		h *= 1099511628211 // FNV prime
+	}
+	return h
+}
+
+// Array 数组运行时对象
+// 元素可以是任意 Object 类型（支持多类型混合）
+type Array struct {
+	Elements []Object
+}
+
+func (a *Array) Type() ObjectType { return ARRAY_OBJ }
+func (a *Array) Inspect() string {
+	var out bytes.Buffer
+	elements := make([]string, 0, len(a.Elements))
+	for _, e := range a.Elements {
+		elements = append(elements, e.Inspect())
+	}
+	out.WriteString("[")
+	out.WriteString(joinStrings(elements, ", "))
+	out.WriteString("]")
+	return out.String()
+}
+
+// joinStrings 连接字符串切片
+func joinStrings(s []string, sep string) string {
+	if len(s) == 0 {
+		return ""
+	}
+	result := s[0]
+	for i := 1; i < len(s); i++ {
+		result += sep + s[i]
+	}
+	return result
+}
+
+// =============================================================================
+// 哈希表：键值对容器
+// =============================================================================
+
+// HashKey 哈希键的内部表示
+// 用于解决 Go map 的指针比较问题
+type HashKey struct {
+	Type  ObjectType
+	Value uint64
+}
+
+// Hashable 可哈希接口
+// 只有实现此接口的类型才能作为哈希表的 key
+type Hashable interface {
+	HashKey() HashKey
+}
+
+// HashPair 哈希键值对
+// 必须保存原始 key 对象，用于格式化输出
+type HashPair struct {
+	Key   Object // 原始 key 对象
+	Value Object
+}
+
+// Hash 哈希运行时对象
+// key 仅支持 String、Integer、Boolean（其他类型运行时报错）
+type Hash struct {
+	Pairs map[HashKey]HashPair
+}
+
+func (h *Hash) Type() ObjectType { return HASH_OBJ }
+func (h *Hash) Inspect() string {
+	var out bytes.Buffer
+	pairs := make([]string, 0, len(h.Pairs))
+	for _, pair := range h.Pairs {
+		pairs = append(pairs, pair.Key.Inspect()+": "+pair.Value.Inspect())
+	}
+	out.WriteString("{")
+	out.WriteString(joinStrings(pairs, ", "))
+	out.WriteString("}")
+	return out.String()
+}
+
+// =============================================================================
+// 内置函数：Monkey与Go宿主语言的桥梁
+// =============================================================================
+
+// BuiltinFunction Go侧内置函数的函数签名
+// 可变参数，接收任意个数 object.Object，返回一个 object.Object
+type BuiltinFunction func(args ...Object) Object
+
+// Builtin 把 Go 函数包装成 Monkey 运行时对象
+type Builtin struct {
+	Fn BuiltinFunction
+}
+
+func (b *Builtin) Type() ObjectType { return BUILTIN_OBJ }
+func (b *Builtin) Inspect() string  { return "builtin function" }

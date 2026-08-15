@@ -43,6 +43,7 @@ var precedences = map[token.TokenType]int{
 	token.SLASH:    product,
 	token.ASTERISK: product,
 	token.LPAREN:   call,
+	token.LBRACKET: call, // 数组索引 [i] 和函数调用有相同优先级
 }
 
 // =============================================================================
@@ -95,6 +96,9 @@ func New(l *lexer.Lexer) *Parser {
 	p.registerPrefix(token.LPAREN, p.parseGroupedExpression)
 	p.registerPrefix(token.IF, p.parseIfExpression)
 	p.registerPrefix(token.FUNCTION, p.parseFunctionLiteral)
+	p.registerPrefix(token.STRING, p.parseStringLiteral)
+	p.registerPrefix(token.LBRACKET, p.parseArrayLiteral)
+	p.registerPrefix(token.LBRACE, p.parseHashLiteral)
 
 	p.infixParseFns = make(map[token.TokenType]infixParseFn)
 	p.registerInfix(token.PLUS, p.parseInfixExpression)
@@ -106,6 +110,7 @@ func New(l *lexer.Lexer) *Parser {
 	p.registerInfix(token.LT, p.parseInfixExpression)
 	p.registerInfix(token.GT, p.parseInfixExpression)
 	p.registerInfix(token.LPAREN, p.parseCallExpression)
+	p.registerInfix(token.LBRACKET, p.parseIndexExpression)
 
 	// 预读两个 Token
 	p.nextToken()
@@ -519,4 +524,108 @@ func (p *Parser) peekError(t token.TokenType) {
 func (p *Parser) noPrefixParseFnError(t token.TokenType) {
 	msg := fmt.Sprintf("no prefix parse function for %s found", t)
 	p.errors = append(p.errors, msg)
+}
+
+// =============================================================================
+// 字符串、数组、哈希解析函数
+// =============================================================================
+
+// parseStringLiteral 解析字符串字面量
+// 语法: "hello world"
+func (p *Parser) parseStringLiteral() ast.Expression {
+	return &ast.StringLiteral{Token: p.curToken, Value: p.curToken.Literal}
+}
+
+// parseArrayLiteral 解析数组字面量
+// 语法: [<element>, <element>, ...]
+func (p *Parser) parseArrayLiteral() ast.Expression {
+	array := &ast.ArrayLiteral{Token: p.curToken}
+	array.Elements = p.parseExpressionList(token.RBRACKET)
+	return array
+}
+
+// parseExpressionList 解析逗号分隔的表达式列表
+// 传入结束 Token，返回表达式列表
+func (p *Parser) parseExpressionList(end token.TokenType) []ast.Expression {
+	list := []ast.Expression{}
+
+	// 空列表
+	if p.peekTokenIs(end) {
+		p.nextToken()
+		return list
+	}
+
+	p.nextToken()
+	list = append(list, p.parseExpression(lowest))
+
+	// 解析剩余元素
+	for p.peekTokenIs(token.COMMA) {
+		p.nextToken()
+		p.nextToken()
+		list = append(list, p.parseExpression(lowest))
+	}
+
+	if !p.expectPeek(end) {
+		return nil
+	}
+
+	return list
+}
+
+// parseIndexExpression 解析索引表达式
+// 语法: <left>[<index>]
+// 示例: arr[0], hash["name"]
+func (p *Parser) parseIndexExpression(left ast.Expression) ast.Expression {
+	exp := &ast.IndexExpression{Token: p.curToken, Left: left}
+	p.nextToken()
+	exp.Index = p.parseExpression(lowest)
+
+	if !p.expectPeek(token.RBRACKET) {
+		return nil
+	}
+
+	return exp
+}
+
+// parseHashLiteral 解析哈希字面量
+// 语法: { <key>: <value>, ... }
+// 示例: {"name": "Tom", "age": 25}
+func (p *Parser) parseHashLiteral() ast.Expression {
+	hash := &ast.HashLiteral{Token: p.curToken}
+	hash.Pairs = make(map[ast.Expression]ast.Expression)
+
+	// 空哈希
+	if p.peekTokenIs(token.RBRACE) {
+		p.nextToken()
+		return hash
+	}
+
+	// 解析第一个键值对
+	p.nextToken()
+	key := p.parseExpression(lowest)
+	if !p.expectPeek(token.COLON) {
+		return nil
+	}
+	p.nextToken()
+	value := p.parseExpression(lowest)
+	hash.Pairs[key] = value
+
+	// 解析剩余键值对
+	for p.peekTokenIs(token.COMMA) {
+		p.nextToken() // 跳过逗号
+		p.nextToken() // 前进到 key
+		key := p.parseExpression(lowest)
+		if !p.expectPeek(token.COLON) {
+			return nil
+		}
+		p.nextToken() // 前进到 value
+		value := p.parseExpression(lowest)
+		hash.Pairs[key] = value
+	}
+
+	if !p.expectPeek(token.RBRACE) {
+		return nil
+	}
+
+	return hash
 }

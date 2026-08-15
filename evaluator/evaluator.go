@@ -75,6 +75,30 @@ func Eval(node ast.Node, env *object.Environment) object.Object {
 			return args[0]
 		}
 		return applyFunction(function, args)
+
+	case *ast.StringLiteral:
+		return &object.String{Value: node.Value}
+
+	case *ast.ArrayLiteral:
+		elements := evalExpressions(node.Elements, env)
+		if len(elements) == 1 && isError(elements[0]) {
+			return elements[0]
+		}
+		return &object.Array{Elements: elements}
+
+	case *ast.IndexExpression:
+		left := Eval(node.Left, env)
+		if isError(left) {
+			return left
+		}
+		index := Eval(node.Index, env)
+		if isError(index) {
+			return index
+		}
+		return evalIndexExpression(left, index)
+
+	case *ast.HashLiteral:
+		return evalHashLiteral(node, env)
 	}
 
 	return nil
@@ -185,6 +209,8 @@ func evalInfixExpression(operator string, left, right object.Object) object.Obje
 	switch {
 	case left.Type() == object.INTEGER_OBJ && right.Type() == object.INTEGER_OBJ:
 		return evalIntegerInfixExpression(operator, left, right)
+	case left.Type() == object.STRING_OBJ && right.Type() == object.STRING_OBJ:
+		return evalStringInfixExpression(operator, left, right)
 	case operator == "==":
 		return nativeBoolToBooleanObject(left == right)
 	case operator == "!=":
@@ -194,6 +220,16 @@ func evalInfixExpression(operator string, left, right object.Object) object.Obje
 	default:
 		return newError("unknown operator: %s %s %s", left.Type(), operator, right.Type())
 	}
+}
+
+// evalStringInfixExpression 字符串拼接
+func evalStringInfixExpression(operator string, left, right object.Object) object.Object {
+	if operator != "+" {
+		return newError("unknown operator: %s %s %s", left.Type(), operator, right.Type())
+	}
+	leftVal := left.(*object.String).Value
+	rightVal := right.(*object.String).Value
+	return &object.String{Value: leftVal + rightVal}
 }
 
 func evalIntegerInfixExpression(operator string, left, right object.Object) object.Object {
@@ -246,10 +282,16 @@ func isError(obj object.Object) bool {
 // evalIdentifier 标识符求值（表达式位置），从环境变量中查询
 func evalIdentifier(node *ast.Identifier, env *object.Environment) object.Object {
 	val, ok := env.Get(node.Value)
-	if !ok {
-		return newError("identifier not found: %s", node.Value)
+	if ok {
+		return val
 	}
-	return val
+
+	// 查找内置函数
+	if builtin, ok := getBuiltin(node.Value); ok {
+		return builtin
+	}
+
+	return newError("identifier not found: %s", node.Value)
 }
 
 // evalExpressions 批量求值表达式列表（实参列表）
@@ -267,13 +309,16 @@ func evalExpressions(exps []ast.Expression, env *object.Environment) []object.Ob
 
 // applyFunction 执行函数调用
 func applyFunction(fn object.Object, args []object.Object) object.Object {
-	function, ok := fn.(*object.Function)
-	if !ok {
+	switch fn := fn.(type) {
+	case *object.Function:
+		extendedEnv := extendFunctionEnv(fn, args)
+		evaluated := Eval(fn.Body, extendedEnv)
+		return unwrapReturnValue(evaluated)
+	case *object.Builtin:
+		return fn.Fn(args...)
+	default:
 		return newError("not a function: %s", fn.Type())
 	}
-	extendedEnv := extendFunctionEnv(function, args)
-	evaluated := Eval(function.Body, extendedEnv)
-	return unwrapReturnValue(evaluated)
 }
 
 // extendFunctionEnv 创建函数调用子环境
@@ -291,4 +336,71 @@ func unwrapReturnValue(obj object.Object) object.Object {
 		return rv.Value
 	}
 	return obj
+}
+
+// evalIndexExpression 索引表达式求值（数组和哈希）
+func evalIndexExpression(left, index object.Object) object.Object {
+	switch left.Type() {
+	case object.ARRAY_OBJ:
+		return evalArrayIndexExpression(left, index)
+	case object.HASH_OBJ:
+		return evalHashIndexExpression(left, index)
+	default:
+		return newError("index operator not supported: %s", left.Type())
+	}
+}
+
+// evalArrayIndexExpression 数组索引求值
+func evalArrayIndexExpression(array, index object.Object) object.Object {
+	arrayObj := array.(*object.Array)
+	idx := index.(*object.Integer).Value
+	max := int64(len(arrayObj.Elements) - 1)
+
+	if idx < 0 || idx > max {
+		return object.NULL
+	}
+	return arrayObj.Elements[idx]
+}
+
+// evalHashIndexExpression 哈希索引求值
+func evalHashIndexExpression(hash, index object.Object) object.Object {
+	hashObj := hash.(*object.Hash)
+
+	key, ok := index.(object.Hashable)
+	if !ok {
+		return newError("unusable as hash key: %s", index.Type())
+	}
+
+	pair, ok := hashObj.Pairs[key.HashKey()]
+	if !ok {
+		return object.NULL
+	}
+	return pair.Value
+}
+
+// evalHashLiteral 哈希字面量求值
+func evalHashLiteral(node *ast.HashLiteral, env *object.Environment) object.Object {
+	pairs := make(map[object.HashKey]object.HashPair)
+
+	for keyNode, valueNode := range node.Pairs {
+		key := Eval(keyNode, env)
+		if isError(key) {
+			return key
+		}
+
+		// 检查 key 是否实现了 Hashable 接口
+		hashKey, ok := key.(object.Hashable)
+		if !ok {
+			return newError("unusable as hash key: %s", key.Type())
+		}
+
+		value := Eval(valueNode, env)
+		if isError(value) {
+			return value
+		}
+
+		pairs[hashKey.HashKey()] = object.HashPair{Key: key, Value: value}
+	}
+
+	return &object.Hash{Pairs: pairs}
 }
