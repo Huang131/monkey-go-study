@@ -11,9 +11,19 @@ import (
 	"monkey-go/repl"
 )
 
-// debugInput 三个调试函数共用的测试代码（末尾不带换行，配合 fmt.Println 使用）
+// debugInput 三个调试函数共用的测试代码
+// 涵盖：基础类型、函数、控制流、字符串、数组、哈希、内置函数
+// 注意：暂不支持行注释 (//)，使用空行分隔不同类型的代码
 const debugInput = `let five = 5;
 let ten = 10;
+
+let greeting = "Hello, " + "World!";
+let name = "Monkey";
+
+let numbers = [1, 2, 3, 4, 5];
+let mixed = ["hello", 42, true];
+
+let person = {"name": "Tom", "age": 25};
 
 let add = fn(x, y) {
 	x + y;
@@ -23,8 +33,17 @@ let result = add(five, ten);
 !-5;
 !!true;
 -10 * 5;
-5 < 10 > 5;
-a + b * c - d / e;
+
+let first = numbers[0];
+let last = numbers[len(numbers) - 1];
+let personName = person["name"];
+
+let arr = [1, 2, 3];
+let arrLen = len(arr);
+let arrFirst = first(arr);
+let arrLast = last(arr);
+let arrRest = rest(arr);
+let arrPushed = push(arr, 4);
 
 if (5 < 10) {
 	return true;
@@ -159,6 +178,14 @@ func runEvalDebug() {
 				fmt.Printf("    ❌ 错误: %s\n", result.Inspect())
 			case object.FUNCTION_OBJ:
 				fmt.Printf("    ✅ 函数对象: %s\n", truncate(result.Inspect(), 50))
+			case object.STRING_OBJ:
+				fmt.Printf("    ✅ 字符串: %q\n", result.Inspect())
+			case object.ARRAY_OBJ:
+				fmt.Printf("    ✅ 数组: %s\n", result.Inspect())
+			case object.HASH_OBJ:
+				fmt.Printf("    ✅ 哈希: %s\n", result.Inspect())
+			case object.BUILTIN_OBJ:
+				fmt.Printf("    ✅ 内置函数: %s\n", result.Inspect())
 			default:
 				fmt.Printf("    ✅ 结果: %s\n", result.Inspect())
 			}
@@ -169,12 +196,24 @@ func runEvalDebug() {
 
 	// 环境变量
 	fmt.Println("\n【环境变量】")
-	vars := []string{"five", "ten", "add", "result", "fibonacci"}
+	vars := []string{
+		"five", "ten", "greeting", "name",
+		"numbers", "mixed", "person",
+		"add", "result",
+		"arr", "arrFirst", "arrLast", "arrRest", "arrPushed", "arrLen",
+		"fibonacci",
+	}
 	for _, v := range vars {
 		if val, ok := env.Get(v); ok {
 			switch val.Type() {
 			case object.FUNCTION_OBJ:
 				fmt.Printf("  %s: fn(...)\n", v)
+			case object.STRING_OBJ:
+				fmt.Printf("  %s: %q\n", v, val.Inspect())
+			case object.ARRAY_OBJ:
+				fmt.Printf("  %s: %s\n", v, val.Inspect())
+			case object.HASH_OBJ:
+				fmt.Printf("  %s: %s\n", v, val.Inspect())
 			default:
 				fmt.Printf("  %s: %s\n", v, val.Inspect())
 			}

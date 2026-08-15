@@ -417,3 +417,245 @@ func TestTruncate(t *testing.T) {
 		}
 	}
 }
+
+// =============================================================================
+// 新功能测试：字符串、数组、哈希、内置函数
+// =============================================================================
+
+// TestEvalString 测试字符串字面量
+func TestEvalString(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{`"hello"`, "hello"},
+		{`"Hello" + " " + "World!"`, "Hello World!"},
+		{`"foo" + "bar"`, "foobar"},
+	}
+
+	for _, tt := range tests {
+		obj := testEval(tt.input)
+		if obj == nil {
+			t.Errorf("eval(%q) returned nil", tt.input)
+			continue
+		}
+		if obj.Inspect() != tt.expected {
+			t.Errorf("eval(%q) = %q, want %q", tt.input, obj.Inspect(), tt.expected)
+		}
+	}
+}
+
+// TestEvalArray 测试数组字面量和索引
+func TestEvalArray(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{"[1, 2, 3]", "[1, 2, 3]"},
+		{"[1, 2, 3][0]", "1"},
+		{"[1, 2, 3][1]", "2"},
+		{"[1, 2, 3][2]", "3"},
+		{"[1, 2, 3][-1]", "null"}, // 越界返回 null
+		{"[1, 2, 3][5]", "null"},  // 越界返回 null
+		{"let arr = [1, 2, 3]; arr[0]", "1"},
+	}
+
+	for _, tt := range tests {
+		obj := testEval(tt.input)
+		if obj == nil {
+			t.Errorf("eval(%q) returned nil", tt.input)
+			continue
+		}
+		if obj.Inspect() != tt.expected {
+			t.Errorf("eval(%q) = %q, want %q", tt.input, obj.Inspect(), tt.expected)
+		}
+	}
+}
+
+// TestEvalHash 测试哈希字面量和索引
+func TestEvalHash(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{`{"name": "Tom"}`, "{name: Tom}"},
+		{`{"foo": 5}["foo"]`, "5"},
+		{`{"foo": 5}["bar"]`, "null"},             // key 不存在
+		{`let key = "foo"; {"foo": 5}[key]`, "5"}, // 变量作为 key
+		{`let h = {"a": 1, "b": 2}; h["a"]`, "1"},
+	}
+
+	for _, tt := range tests {
+		obj := testEval(tt.input)
+		if obj == nil {
+			t.Errorf("eval(%q) returned nil", tt.input)
+			continue
+		}
+		if obj.Inspect() != tt.expected {
+			t.Errorf("eval(%q) = %q, want %q", tt.input, obj.Inspect(), tt.expected)
+		}
+	}
+}
+
+// TestBuiltinLen 测试 len 内置函数
+func TestBuiltinLen(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{`len("hello")`, "5"},
+		{`len("")`, "0"},
+		{`len([1, 2, 3])`, "3"},
+		{`len([])`, "0"},
+	}
+
+	for _, tt := range tests {
+		obj := testEval(tt.input)
+		if obj == nil {
+			t.Errorf("eval(%q) returned nil", tt.input)
+			continue
+		}
+		if obj.Inspect() != tt.expected {
+			t.Errorf("eval(%q) = %q, want %q", tt.input, obj.Inspect(), tt.expected)
+		}
+	}
+}
+
+// TestBuiltinArrayFunctions 测试数组内置函数
+func TestBuiltinArrayFunctions(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{"first([1, 2, 3])", "1"},
+		{"first([5])", "5"},
+		{"first([])", "null"}, // 空数组返回 null
+		{"last([1, 2, 3])", "3"},
+		{"last([5])", "5"},
+		{"last([])", "null"}, // 空数组返回 null
+		{"rest([1, 2, 3])", "[2, 3]"},
+		{"rest([5])", "null"}, // 单元素返回 null
+		{"rest([])", "null"},  // 空数组返回 null
+		{"push([1, 2], 3)", "[1, 2, 3]"},
+		{"push([], 1)", "[1]"},
+	}
+
+	for _, tt := range tests {
+		obj := testEval(tt.input)
+		if obj == nil {
+			t.Errorf("eval(%q) returned nil", tt.input)
+			continue
+		}
+		if obj.Inspect() != tt.expected {
+			t.Errorf("eval(%q) = %q, want %q", tt.input, obj.Inspect(), tt.expected)
+		}
+	}
+}
+
+// TestBuiltinErrorHandling 测试内置函数错误处理
+func TestBuiltinErrorHandling(t *testing.T) {
+	tests := []struct {
+		input       string
+		expectError bool
+	}{
+		{"len(1)", true},          // 不支持的参数类型
+		{"first(1)", true},        // 参数不是数组
+		{"last(1)", true},         // 参数不是数组
+		{"rest(1)", true},         // 参数不是数组
+		{"push(1, 2)", true},      // 参数不是数组
+		{"len(1, 2)", true},       // 参数个数错误
+		{"first([])", false},      // 空数组合法，返回 null
+		{"len([1,2,3])", false},   // 正确用法
+		{"len(\"hello\")", false}, // 正确用法
+	}
+
+	for _, tt := range tests {
+		obj := testEval(tt.input)
+		if obj == nil {
+			t.Errorf("eval(%q) returned nil", tt.input)
+			continue
+		}
+		isError := obj.Type() == object.ERROR_OBJ
+		if isError != tt.expectError {
+			if tt.expectError {
+				t.Errorf("eval(%q) expected error, got %q", tt.input, obj.Inspect())
+			} else {
+				t.Errorf("eval(%q) unexpected error: %s", tt.input, obj.Inspect())
+			}
+		}
+	}
+}
+
+// TestFullPipelineIntegration 测试完整流水线：字符串 → 数组 → 哈希 → 内置函数
+func TestFullPipelineIntegration(t *testing.T) {
+	// 测试复杂场景：各种新功能组合使用
+	input := `
+let arr = ["a", "b", "c"];
+let str = "hello";
+let combinedLen = len(arr) + len(str);
+combinedLen;
+`
+	obj := testEval(input)
+	// len(arr)=3 + len(str)=5 = 8
+	if obj.Inspect() != "8" {
+		t.Errorf("expected 8, got %s", obj.Inspect())
+	}
+}
+
+// TestBuiltinOverride 测试内置函数覆盖
+func TestBuiltinOverride(t *testing.T) {
+	// 用户可以覆盖内置函数
+	input := `
+let len = fn(x) { "自定义len" };
+len(5);
+`
+	obj := testEval(input)
+	if obj.Inspect() != "自定义len" {
+		t.Errorf("expected '自定义len', got %s", obj.Inspect())
+	}
+}
+
+// TestArrayWithExpressions 测试数组中的表达式
+func TestArrayWithExpressions(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{"[1 + 1, 2 * 2, 3]", "[2, 4, 3]"},
+		{"[len(\"hi\"), first([1,2]), rest([3,4])[0]]", "[2, 1, 4]"},
+	}
+
+	for _, tt := range tests {
+		obj := testEval(tt.input)
+		if obj == nil {
+			t.Errorf("eval(%q) returned nil", tt.input)
+			continue
+		}
+		if obj.Inspect() != tt.expected {
+			t.Errorf("eval(%q) = %q, want %q", tt.input, obj.Inspect(), tt.expected)
+		}
+	}
+}
+
+// TestHashWithComputedKeys 测试哈希计算键
+func TestHashWithComputedKeys(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{`{"one": 1 + 0}`, "{one: 1}"},
+		{`let k = "key"; {k: 100}["key"]`, "100"},
+		{`{"a": 1, "b": 2, "c": 3}["b"]`, "2"},
+	}
+
+	for _, tt := range tests {
+		obj := testEval(tt.input)
+		if obj == nil {
+			t.Errorf("eval(%q) returned nil", tt.input)
+			continue
+		}
+		if obj.Inspect() != tt.expected {
+			t.Errorf("eval(%q) = %q, want %q", tt.input, obj.Inspect(), tt.expected)
+		}
+	}
+}
