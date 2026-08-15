@@ -1,3 +1,8 @@
+# doc/03_求值器_Evaluator.md
+> 章节名称：**第03章 求值器：递归遍历AST，产出运行时对象**
+> 目标：手写Monkey解释器Evaluator模块，理解树遍历解释器架构、AST到Object的转换、Environment作用域管理、设计思路与踩坑点。
+> 完整实现代码请查阅仓库对应源码文件：`evaluator/evaluator.go`、`evaluator/evaluator_test.go`、`object/object.go`。
+
 # eval-01：求值器开篇与整体架构
 
 ## 一、三层流水线（核心铁律）
